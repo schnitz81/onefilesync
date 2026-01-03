@@ -7,7 +7,7 @@ Minimal tool that keeps a single file two-way synced.
 ### Listener
 Python 3 with standard modules (no pip installations).
 A tcp port (default 48444) needs to be reachable from the agent for the network communication.
-A Dockerfile /Docker image is available as an option. 
+A Dockerfile / Docker image is available as an option. 
 
 ### Agent
 netcat-openbsd
