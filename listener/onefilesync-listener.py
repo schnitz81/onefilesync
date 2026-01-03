@@ -13,7 +13,7 @@ from pathlib import Path
 # (can be overridden by environment variables or .env file)
 ###########################################################
 TOKEN = "mylongsecrettoken"  # same as agent
-SYNCFILE = "/home/user/temp/testfile.txt"
+SYNCFILE = "/home/user/testfile.txt"
 ###########################################################
 
 # variables that can be set if needed
@@ -22,11 +22,9 @@ SYNCFILE = "/home/user/temp/testfile.txt"
 PORT = 48444
 LOGLEVEL = 1   #  0 : error, 1 : info, 2 : debug
 LOGFILE = "/tmp/onefilesync-listener.log"
-GRACEPERIOD = 5
+GRACEPERIOD = 3
 ###########################################################
 
-
-prev_md5 = ""
 
 def set_env_vars():
     global PORT
@@ -72,6 +70,10 @@ def set_env_vars():
 def log(msg, msglevel):
     if LOGLEVEL >= msglevel:
         print(f"{datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")} {msg}")
+        if LOGFILE:
+            with open(LOGFILE, "a") as f:
+                f.write(msg + '\n')
+
 
 
 def file_exists(filepath):
@@ -216,9 +218,7 @@ def base64_to_file(b64str, filepath):
         log(b64tofile_e, 0)
 
 
-def process(data):
-
-    global prev_md5
+def process(data, addr):
 
     # decrypt received data
     decrypted_data = decrypt(data.decode("utf-8"))
@@ -233,39 +233,24 @@ def process(data):
     command = decrypted_data.split(' ')[0].rstrip()
 
     # sync check
-    if command == 'CMPMD5':
-        log("command received: CMPMD5", 2)
-        received_md5 = decrypted_data.split(' ')[1].rstrip()
+    if command == 'REQMD5':
+        log(f"command received from {addr}: REQMD5", 2)
+        #received_md5 = decrypted_data.split(' ')[1].rstrip()
         current_md5 = get_md5(SYNCFILE)
 
         if current_md5 is None:
             log("Unable to get md5sum for local syncfile.", 0)
             exit(1)
-        elif received_md5 == current_md5:
-            log("Local and received md5sum match. Setting prev_md5 to same value.", 2)
-            prev_md5 = current_md5
-            return "AGENTSYNCED"
+        elif sync_file_changed_recently():
+            log("Listener file changed recently - LISTENERFILECHANGEDRECENTLY", 2)
+            return "LISTENERFILECHANGEDRECENTLY"
         else:
-            # previous md5sum must be set if listener and agent aren't aligned
-            if not prev_md5:
-                log("ERROR: Files are different! Please align files manually and run again.", 0)
-                log(f"local md5: {current_md5}  received md5: {received_md5}", 2)
-                exit(1)
-            # listener side changed recently
-            elif sync_file_changed_recently():
-                log("Listener file changed recently - LISTENERFILECHANGEDRECENTLY", 2)
-                return "LISTENERFILECHANGEDRECENTLY"
-            # listener side changed
-            elif prev_md5 == received_md5:
-                log("Listener file changed - REQAGENTTORECEIVE", 2)
-                return "REQAGENTTORECEIVE"
-            else:
-                log("Agent file changed - running req_agent_to_receive", 2)
-                return "REQAGENTTOSEND"
+            log(f"returning LISTENERCURRENTMD5 {current_md5}" ,2)
+            return f"LISTENERCURRENTMD5 {current_md5}"
 
     # agent is sending file
     elif command == 'FILESEND':
-        log("Agent file changed. Receiving file from agent.", 1)
+        log(f"Agent {addr} file changed. Receiving file from agent.", 1)
         received_md5 = decrypted_data.split(' ')[1]
         log(f"received_md5: {received_md5}", 2)
         received_file = decrypted_data.split(' ')[2]
@@ -278,30 +263,31 @@ def process(data):
             log("md5sum on received file is valid. Overwriting local file with received file." ,2)
 
             if rename_file(f'{SYNCFILE}.tmp', SYNCFILE):
-                prev_md5 = get_md5(SYNCFILE)
                 log("Received file OK.", 1)
                 return "LISTENERRECEIVEDFILEOK"
         else:
-            log("ERROR: md5sum on received file is invalid. Not overwriting current local file.", 0)
+            log(f"ERROR: md5sum on received file from {addr} is invalid. Not overwriting current local file.", 0)
             return "LISTENERRECEIVEDFILEERROR"
 
     # agent is expecting to receive file
     elif command == 'FILEREQUEST':
-        log("Listener file changed - agent requesting file.", 1)
-        log("Sending md5sum and file to agent.", 2)
+        log(f"Listener file changed - agent {addr} requesting file.", 1)
+        log(f"Sending md5sum and file to agent {addr}.", 2)
         current_md5 = get_md5(SYNCFILE)
         b64file = file_to_base64(SYNCFILE)
         return f"LISTENERFILESEND {current_md5} {b64file}"
 
     # agent received file successfully
     elif command == 'AGENTRECEIVEDFILEOK':
-        log("Agent received file OK.", 1)
+        log(f"Agent {addr} received file OK.", 1)
 
     # agent received file error
     elif command == 'AGENTRECEIVEDFILEERROR':
-        log("ERROR: Agent failed to receive file.", 0)
+        log(f"ERROR: Agent {addr} failed to receive file.", 0)
 
-    elif command == '':
+    elif command == '' or command is None:
+        log(f"No valid data when processing request from {addr}.", 0)
+        log("Returning NOVALIDDATA", 2)
         return "NOVALIDDATA"
 
     # Should never happen
@@ -347,7 +333,7 @@ def tcp_listen_and_reply():
             continue
 
         # generate response
-        returnmsg = encrypt(process(data))
+        returnmsg = encrypt(process(data, addr))
         log(f"returnmsg to parse: {returnmsg}", 2)
 
         try:
