@@ -21,7 +21,6 @@ SYNC_INTERVAL=10  # how often the file will be synced with the listener
 listener_recent_change=1
 GRACEPERIOD=3  # time after a file change that it can be synced
 CHANGE_SYNC_INTERVAL=2  # sync check this often when change was recently made
-prev_md5=""
 first_run=1
 force_file_fetch=0
 DEPENDENCIES=("nc" "base64" "openssl" "gzip" "md5sum")
@@ -58,7 +57,7 @@ function syncfile_exists() {
 	fi
 }
 
-function get_current_md5(){
+function get_current_md5() {
 	syncfile_exists
 	file_md5=$(md5sum "$SYNCFILE" | cut -f 1 -d ' ')
 	if [ -z "$file_md5" ]; then
@@ -67,8 +66,7 @@ function get_current_md5(){
 	echo "$file_md5"
 }
 
-function syncfile_changed_recently() {
-	# check if file changed the last few seconds
+function get_changeage() {
 	local now=$(date +%s)
 	if [ "$OSTYPE" == "LINUX" ]; then
 		local changed_epoch=$(stat -c "%Y" "$SYNCFILE")
@@ -86,8 +84,13 @@ function syncfile_changed_recently() {
 		log "ERROR: Unable to retrieve changed epoch of file." "0"
 		return 1
 	fi
+	# calculate time difference to get epoch time since last change of file
+	echo "$((now-changed_epoch))"
+}
+
+function syncfile_changed_recently() {
 	# calculate time difference to see if the file was changed within the grace period
-	if [ "$((now-changed_epoch))" -lt "$GRACEPERIOD" ]; then
+	if [ "$(get_changeage)" -lt "$GRACEPERIOD" ]; then
 		true
 	else
 		false
@@ -143,7 +146,7 @@ while true; do
 
 	# interval pause
 	if [[ "$first_run" -eq 1 ]]; then
-	  log "skipping pause due to first run" "2"
+		log "skipping pause due to first run" "2"
 	elif [[ $listener_recent_change -eq 1 ]]; then
 		sleep "$CHANGE_SYNC_INTERVAL"
 		listener_recent_change=0
@@ -168,8 +171,8 @@ while true; do
 		exit 1
 	fi
 
-	log "Sending REQMD5 to listener" "2"
-	encrypted_response=$(send_to_listener "$(encrypt "REQMD5")")
+	log "Sending REQMD5ANDCHANGEAGE to listener" "2"
+	encrypted_response=$(send_to_listener "$(encrypt "REQMD5ANDCHANGEAGE")")
 
 	if [ -z "$encrypted_response" ] || [[ "$encrypted_response" == *"No server response"* ]]; then
 		log "ERROR: No data received from listener." "0"
@@ -180,12 +183,11 @@ while true; do
 	response_cmd=$(echo "$decrypted_response" | cut -f 1 -d ' ')
 
 	case $response_cmd in
-		LISTENERCURRENTMD5)
+		LISTENERMD5ANDCHANGEAGE)
 			received_md5=$(echo "$decrypted_response" | cut -d ' ' -f 2)
+			received_changeage=$(echo "$decrypted_response" | cut -d ' ' -f 3)
 			if [ "$received_md5" == "$current_md5" ]; then
 				log "Agent synced with listener." "2"
-				prev_md5=$current_md5
-
 
 			# files not in sync and first run
 			elif [[ "$first_run" -eq 1 ]]; then
@@ -198,7 +200,7 @@ while true; do
 				fi
 
 			# agent file changed - send file to listener
-			elif [ "$received_md5" == "$prev_md5" ] && [[ "$force_file_fetch" -ne 1 ]]; then
+			elif [ "$(get_changeage)" -lt "$received_changeage" ] && [[ "$force_file_fetch" -ne 1 ]]; then
 				log "Agent file changed. Sending file to listener." "1"
 
 				# last check for additional change of local file before sending
