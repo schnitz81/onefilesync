@@ -155,7 +155,7 @@ def encrypt(data):
         log(openssl_e, 0)
 
 
-def sync_file_changed_recently():
+def get_changeage():
     try:
         epoch_now = int(time.time())
         if 'linux' in sys.platform.lower():
@@ -181,12 +181,18 @@ def sync_file_changed_recently():
         else:
             log("ERROR: Unrecognized OS.", 0)
             exit(1)
-        if epoch_now - filechanged_epoch < GRACEPERIOD:
+        changeage = epoch_now - filechanged_epoch
+        return changeage
+    except Exception as changeage_e:
+        log(changeage_e, 0)
+
+
+def sync_file_changed_recently():
+        changeage = get_changeage()
+        if changeage < GRACEPERIOD:
             return True
         else:
             return False
-    except Exception as changetimeread_e:
-        log(changetimeread_e, 0)
 
 
 def get_md5(file):
@@ -233,10 +239,10 @@ def process(data, addr):
     command = decrypted_data.split(' ')[0].rstrip()
 
     # sync check
-    if command == 'REQMD5':
-        log(f"command received from {addr}: REQMD5", 2)
-        #received_md5 = decrypted_data.split(' ')[1].rstrip()
+    if command == 'REQMD5ANDCHANGEAGE':
+        log(f"command received from {addr}: REQMD5ANDCHANGEAGE", 2)
         current_md5 = get_md5(SYNCFILE)
+        changeage = get_changeage()
 
         if current_md5 is None:
             log("Unable to get md5sum for local syncfile.", 0)
@@ -245,8 +251,8 @@ def process(data, addr):
             log("Listener file changed recently - LISTENERFILECHANGEDRECENTLY", 2)
             return "LISTENERFILECHANGEDRECENTLY"
         else:
-            log(f"returning LISTENERCURRENTMD5 {current_md5}" ,2)
-            return f"LISTENERCURRENTMD5 {current_md5}"
+            log(f"returning LISTENERMD5ANDCHANGEAGE {current_md5} {changeage}" ,2)
+            return f"LISTENERMD5ANDCHANGEAGE {current_md5} {changeage}"
 
     # agent is sending file
     elif command == 'FILESEND':
