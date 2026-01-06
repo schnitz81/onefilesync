@@ -14,7 +14,7 @@ ENTRYPOINT ["python","-u","onefilesync-listener.py"]
 
 
 ###########################################################
-# # .env file example:
+# # .env file / environment vars:
 # # must be set:
 # TOKEN = "mylongsecrettoken"  # same as agent
 # SYNCFILE = "/home/user/temp/testfile.txt"
@@ -24,5 +24,5 @@ ENTRYPOINT ["python","-u","onefilesync-listener.py"]
 # PORT = 48444
 # LOGLEVEL = 1   #  0 : error, 1 : info, 2 : debug
 # LOGFILE = "/tmp/onefilesync-listener.log"
-# GRACEPERIOD = 5
+# GRACEPERIOD = 3
 ###########################################################
