@@ -2,18 +2,18 @@
 
 # variables that must be set:
 # --------------------------------------------------------------------------
-SERVER="127.0.0.1"
-TOKEN="mylongsecrettoken"  # same as listener
-SYNCFILE="$HOME/temp/testfile.txt"
+: "${SERVER:="127.0.0.1"}"
+: "${TOKEN:="mylongsecrettoken"}"   # same as listener
+: "${SYNCFILE:="$HOME/temp/testfile.txt"}"
 # --------------------------------------------------------------------------
 
 # variables that may be set
 # --------------------------------------------------------------------------
-LISTENER_PORT="48444"
-LOGLEVEL=1   #  0 : error, 1 : info, 2 : debug
-LOGFILE="/tmp/onefilesync-agent.log"
-OSTYPE="LINUX"  # LINUX or BSD (BSD is untested)
-SYNC_INTERVAL=10  # how often the file will be synced with the listener
+: "${LISTENER_PORT:=48444}"
+: "${LOGLEVEL:=1}"   #  0 : error, 1 : info, 2 : debug
+: "${LOGFILE:="/tmp/onefilesync-agent.log"}"
+: "${OSTYPE:="LINUX"}"   # LINUX or BSD (BSD is untested)
+: "${SYNC_INTERVAL:=10}"    # how often the file will be synced with the listener
 # --------------------------------------------------------------------------
 
 
@@ -68,9 +68,9 @@ function get_current_md5() {
 
 function get_changeage() {
 	local now=$(date +%s)
-	if [ "$OSTYPE" == "LINUX" ]; then
+	if [ "$OSTYPE" == "LINUX" ] || [[ "$OSTYPE" == *"linux"* ]]; then
 		local changed_epoch=$(stat -c "%Y" "$SYNCFILE")
-	elif [ "$OSTYPE" == "BSD" ]; then
+	elif [ "$OSTYPE" == "BSD" ] || [[ "$OSTYPE" == *"bsd"* ]]; then
 		local changed_epoch=$(stat -f "%m" "$SYNCFILE")
 	else
 		log "ERROR: Unknown OSTYPE: $OSTYPE" "0"
