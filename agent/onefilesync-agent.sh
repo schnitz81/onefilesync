@@ -18,11 +18,10 @@
 
 
 # internal vars:
-listener_recent_change=1
+listener_recent_change=0
 GRACEPERIOD=3  # time after a file change that it can be synced
 CHANGE_SYNC_INTERVAL=2  # sync check this often when change was recently made
 first_run=1
-force_file_fetch=0
 DEPENDENCIES=("nc" "base64" "openssl" "gzip" "md5sum")
 
 
@@ -147,6 +146,7 @@ while true; do
 	# interval pause
 	if [[ "$first_run" -eq 1 ]]; then
 		log "skipping pause due to first run" "2"
+		first_run=0
 	elif [[ $listener_recent_change -eq 1 ]]; then
 		sleep "$CHANGE_SYNC_INTERVAL"
 		listener_recent_change=0
@@ -176,7 +176,6 @@ while true; do
 
 	if [ -z "$encrypted_response" ] || [[ "$encrypted_response" == *"No server response"* ]]; then
 		log "ERROR: No data received from listener." "0"
-		first_run=0
 		continue
 	fi
 	decrypted_response=$(decrypt "$encrypted_response")
@@ -186,21 +185,13 @@ while true; do
 		LISTENERMD5ANDCHANGEAGE)
 			received_md5=$(echo "$decrypted_response" | cut -d ' ' -f 2)
 			received_changeage=$(echo "$decrypted_response" | cut -d ' ' -f 3)
+
+			# agent and listener in sync
 			if [ "$received_md5" == "$current_md5" ]; then
 				log "Agent synced with listener." "2"
 
-			# files not in sync and first run
-			elif [[ "$first_run" -eq 1 ]]; then
-				echo -e "\nListener and local file differ."
-				read -p "Fetch from listener and overwrite local to initialize sync? " syncpullask
-				if [ "$syncpullask" == 'y' ] || [ "$syncpullask" == 'Y' ] || [ "$syncpullask" == 'yes' ] || [ "$syncpullask" == 'YES' ]; then
-					force_file_fetch=1
-				else
-					echo "Not syncing. Exiting."; exit 0
-				fi
-
-			# agent file changed - send file to listener
-			elif [ "$(get_changeage)" -lt "$received_changeage" ] && [[ "$force_file_fetch" -ne 1 ]]; then
+			# agent file newer - send file to listener
+			elif [ "$(get_changeage)" -lt "$received_changeage" ]; then
 				log "Agent file changed. Sending file to listener." "1"
 
 				# last check for additional change of local file before sending
@@ -230,11 +221,10 @@ while true; do
 					log "ERROR: Unknown error when sending file to listener." "0"
 				fi
 
-			# listener file changed or forced file fetch - retrieve file from listener
+			# listener file newer - retrieve file from listener
 			else
 				log "Listener file changed - requesting file from listener." "1"
 				log "Sending FILEREQUEST." "2"
-				force_file_fetch=0
 				filerequest_response="$(send_to_listener "$(encrypt "FILEREQUEST")")"
 				log "Decrypting filerequest response." "2"
 				decrypted_filerequest_response="$(decrypt "$filerequest_response")"
@@ -275,6 +265,5 @@ while true; do
 			log "Unknown error." "0"
 			;;
 	esac
-	first_run=0
 done
 

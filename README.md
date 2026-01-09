@@ -2,6 +2,8 @@
 
 Minimal tool that keeps a single file two-way synced.
 
+Works with multiple agents and non-aligned timezones.
+
 ## Requirements
 
 ### Listener
