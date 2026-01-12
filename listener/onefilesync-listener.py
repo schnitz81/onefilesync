@@ -227,7 +227,14 @@ def base64_to_file(b64str, filepath):
 def process(data, addr):
 
     # decrypt received data
-    decrypted_data = decrypt(data.decode("utf-8"))
+    try:
+        decrypted_data = decrypt(data.decode("utf-8"))
+    except UnicodeDecodeError as unicode_e:
+        log(f"Decode error: {unicode_e}", 0)
+        return "NOVALIDDATA"
+    except Exception as decrypt_e:
+        log(f"Decrypt error: {decrypt_e}", 0)
+        return "NOVALIDDATA"
     if decrypted_data is None:
         log("No valid data decrypted.", 0)
         return "NOVALIDDATA"
