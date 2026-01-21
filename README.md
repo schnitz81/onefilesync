@@ -22,11 +22,12 @@ Works with multiple agents and non-aligned timezones.
 - TOKEN - A unique encryption token.
 - SYNCFILE - Path to the file that is going to be kept in sync.
 
-All parameters can be set in either of three ways:
+All parameters can be set in either of these ways:
 - Directly in the .py/.sh file.
 - Overridden with environment vars.
 
 Listener only:
+- As input arguments (run with --help for details).
 - In a .env file placed in the same folder as the .py file. A minimal example included.
 
 ### Advanced settings
