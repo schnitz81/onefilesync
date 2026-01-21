@@ -19,6 +19,7 @@
 
 # internal vars:
 listener_recent_change=0
+connection_error_ongoing=0
 GRACEPERIOD=3  # time after a file change that it can be synced
 CHANGE_SYNC_INTERVAL=2  # sync check this often when change was recently made
 first_run=1
@@ -144,10 +145,10 @@ dependencies_check
 while true; do
 
 	# interval pause
-	if [[ "$first_run" -eq 1 ]]; then
+	if (( first_run )); then
 		log "skipping pause due to first run" "2"
 		first_run=0
-	elif [[ $listener_recent_change -eq 1 ]]; then
+	elif (( listener_recent_change )); then
 		sleep "$CHANGE_SYNC_INTERVAL"
 		listener_recent_change=0
 	else
@@ -175,8 +176,16 @@ while true; do
 	encrypted_response=$(send_to_listener "$(encrypt "REQMD5ANDCHANGEAGE")")
 
 	if [ -z "$encrypted_response" ] || [[ "$encrypted_response" == *"No server response"* ]]; then
-		log "ERROR: No data received from listener." "0"
+		if ! (( connection_error_ongoing )); then
+			log "ERROR: No data received from listener." "0"
+			connection_error_ongoing=1
+		fi
 		continue
+	else
+		if (( connection_error_ongoing )); then
+			log "SOLVED: Response received from listener." "0"
+			connection_error_ongoing=0
+		fi
 	fi
 	decrypted_response=$(decrypt "$encrypted_response")
 	response_cmd=$(echo "$decrypted_response" | cut -f 1 -d ' ')
