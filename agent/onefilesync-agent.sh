@@ -146,7 +146,8 @@ while true; do
 
 	# interval pause
 	if (( first_run )); then
-		log "skipping pause due to first run" "2"
+		log "Application start" "1"
+		log "Skipping pause due to first run" "2"
 		first_run=0
 	elif (( listener_recent_change )); then
 		sleep "$CHANGE_SYNC_INTERVAL"
