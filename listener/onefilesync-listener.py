@@ -1,3 +1,4 @@
+import argparse
 import socket
 import datetime
 import subprocess
@@ -12,8 +13,8 @@ from pathlib import Path
 # variables that must be set
 # (can be overridden by environment variables or .env file)
 ###########################################################
-TOKEN = "mylongsecrettoken"  # same as agent
-SYNCFILE = "/home/user/testfile.txt"
+TOKEN = ""  # mylongsecrettoken (same as agent)
+SYNCFILE = ""  # /path/to/file
 ###########################################################
 
 # variables that can be set if needed
@@ -66,6 +67,41 @@ def set_env_vars():
     if 'GRACEPERIOD' in os.environ:
         GRACEPERIOD = int(os.environ['GRACEPERIOD'])
 
+    # argparse
+    parser = argparse.ArgumentParser(prog='onefilesync-listener')
+    parser.add_argument('--port', '-p', action='store', type=int, dest='port', help='TCP port to listen on (must match agent if changed).')
+    parser.add_argument('--token', '-t', action='store', type=str, dest='token', help='Encryption token that needs to match agent.')
+    parser.add_argument('--syncfile', '-s', action='store', type=str, dest='syncfile', help='Path to file to keep in sync.')
+    parser.add_argument('--file', '-f', action='store', type=str, dest='file', help='same as "--syncfile"')
+    parser.add_argument('--loglevel', '-l', action='store', type=int, dest='loglevel', help='Log level: 0 : error, 1 : info, 2 : debug  (default 1)')
+    parser.add_argument('--logfile', action='store', type=str, dest='logfile', help='Custom path to log file.')
+    parser.add_argument('--graceperiod', '-g', action='store', type=str, dest='graceperiod', help='Number of seconds after local file has changed to avoid sync (default 3)')
+    args = parser.parse_args()
+
+    # assign values from input arguments if present
+    if args.port:
+        PORT = args.port
+    if args.token:
+        TOKEN = args.token
+    if args.syncfile:
+        SYNCFILE = args.syncfile
+    elif args.file:
+        SYNCFILE = args.file
+    if args.loglevel:
+        LOGLEVEL = args.loglevel
+    if args.logfile:
+        LOGFILE = args.logfile
+    if args.graceperiod:
+        GRACEPERIOD = args.graceperiod
+
+    # make sure necessary parameters are set
+    if not SYNCFILE:
+        log("SYNCFILE is not set", 0)
+        exit(1)
+    elif not TOKEN:
+        log("TOKEN is not set", 0)
+        exit(1)
+
 
 def log(msg, msglevel):
     if LOGLEVEL >= msglevel:
@@ -73,7 +109,6 @@ def log(msg, msglevel):
         if LOGFILE:
             with open(LOGFILE, "a") as f:
                 f.write(msg + '\n')
-
 
 
 def file_exists(filepath):
