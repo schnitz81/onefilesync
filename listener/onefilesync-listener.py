@@ -108,7 +108,7 @@ def log(msg, msglevel):
         print(f"{datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")} {msg}")
         if LOGFILE:
             with open(LOGFILE, "a") as f:
-                f.write(msg + '\n')
+                f.write(f"{datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")}  {msg}\n")
 
 
 def file_exists(filepath):
