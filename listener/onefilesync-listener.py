@@ -130,25 +130,17 @@ def rename_file(old_filepath, new_filepath):
 
 def decrypt(data):
     try:
-        # decrypt data with TOKEN
-        command = [
-            'openssl', 'aes-256-cbc', '-d',
-            '-md', 'sha3-512',
-            '-a', '-pbkdf2',
-            '-k', TOKEN
-        ]
-        # Use Popen to execute OpenSSL with piped input
+        # define decrypt command
+        command = ['openssl', 'aes-256-cbc', '-d', '-md', 'sha3-512', '-a', '-pbkdf2', '-k', TOKEN]
+        # use Popen to pass data to openssl to avoid max limit
         with subprocess.Popen(command,
-            stdin=subprocess.PIPE,
-            stdout=subprocess.PIPE,
-            stderr=subprocess.PIPE,
-            text=True) as proc:
+            stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True) as proc:
 
-            # Pass data to stdin
+            # pass data to stdin
             openssl_output, openssl_error = proc.communicate(input=data)
             openssl_output = openssl_output.replace('\n', '')
 
-            # Check for errors
+            # check for errors
             if proc.returncode != 0:
                 # handling invalid received data
                 if 'error reading input file' in openssl_error:
@@ -164,27 +156,18 @@ def decrypt(data):
 
 def encrypt(data):
     try:
-        # encrypt data with TOKEN
-        command = [
-            'openssl', 'aes-256-cbc',
-            '-md', 'sha3-512',
-            '-a', '-pbkdf2',
-            '-k', TOKEN
-        ]
-        # Use Popen to execute OpenSSL with piped input
+        # define encrypt command
+        command = ['openssl', 'aes-256-cbc', '-md', 'sha3-512', '-a', '-pbkdf2', '-k', TOKEN]
+        # use Popen to pass data to openssl to avoid max limit
         with subprocess.Popen(command,
-            stdin=subprocess.PIPE,
-            stdout=subprocess.PIPE,
-            stderr=subprocess.PIPE,
-            text=True) as proc:
+            stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True) as proc:
 
-            # Pass data to stdin
+            # pass data to stdin
             openssl_output, openssl_error = proc.communicate(input=data)
 
-            # Check for errors
+            # check for errors
             if proc.returncode != 0:
                 log(openssl_error, 0)
-
         return openssl_output
     except Exception as openssl_e:
         log(openssl_e, 0)
@@ -193,6 +176,7 @@ def encrypt(data):
 def get_changeage():
     try:
         epoch_now = int(time.time())
+        # get file change timestamp on linux
         if 'linux' in sys.platform.lower():
             filechanged_output = subprocess.run(f'''
                     stat -c "%Y" "{SYNCFILE}"
@@ -203,6 +187,7 @@ def get_changeage():
                 text=True
             )
             filechanged_epoch = int(filechanged_output.stdout.rstrip())
+        # get file change timestamp on bsd
         elif 'bsd' in sys.platform.lower():
             filechanged_output = subprocess.run(f'''
                     stat -f "%m" "{SYNCFILE}"
@@ -216,6 +201,7 @@ def get_changeage():
         else:
             log("ERROR: Unrecognized OS.", 0)
             exit(1)
+        # calculate no of seconds ago file was changed
         changeage = epoch_now - filechanged_epoch
         return changeage
     except Exception as changeage_e:
