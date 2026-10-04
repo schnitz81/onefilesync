@@ -17,7 +17,7 @@ CMD ["/onefilesync-agent.sh"]
 # # must be set:
 # SERVER="127.0.0.1"
 # TOKEN="mylongsecrettoken"  # same as listener
-# SYNCFILE="/folder/file"
+# SYNCFILE="/folder/myfile"
 ###########################################################
 #
 # # may be set / can be left out
