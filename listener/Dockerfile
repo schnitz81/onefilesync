@@ -10,14 +10,14 @@ ENTRYPOINT ["python","-u","onefilesync-listener.py"]
 # build example
 # $ docker build -t onefilesync-listener .
 # run example
-# docker run -d --name onefilesync-listener -p 48444:48444 -v /path/to/file.txt:/file.txt -e SYNCFILE="/file.txt" -e TOKEN="mylongsecrettoken" onefilesync-listener
+# docker run -d --name onefilesync-listener -p 48444:48444 -v /path/to/filefolder:/folder -e SYNCFILE="/folder/myfile" -e TOKEN="mylongsecrettoken" onefilesync-listener
 
 
 ###########################################################
 # # .env file / environment vars:
 # # must be set:
 # TOKEN = "mylongsecrettoken"  # same as agent
-# SYNCFILE = "/home/user/temp/testfile.txt"
+# SYNCFILE = "/folder/myfile"
 ###########################################################
 #
 # # may be set / can be left out
