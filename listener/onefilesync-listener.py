@@ -369,6 +369,11 @@ def tcp_listen_and_reply():
             connsock.close()
             continue
 
+        # handle port checks and tiny payloads
+        if bytes_received < 5:
+            log(f"Port check from: {str(addr)}.", 1)
+            continue
+
         # generate response
         returnmsg = encrypt(process(data, addr))
         log(f"returnmsg to parse: {returnmsg}", 2)
