@@ -7,6 +7,7 @@ import hashlib
 import os
 import sys
 import time
+import signal
 from pathlib import Path
 
 
@@ -97,10 +98,10 @@ def set_env_vars():
     # make sure necessary parameters are set
     if not SYNCFILE:
         log("SYNCFILE is not set", 0)
-        exit(1)
+        sys.exit(1)
     elif not TOKEN:
         log("TOKEN is not set", 0)
-        exit(1)
+        sys.exit(1)
 
 
 def log(msg, msglevel):
@@ -200,7 +201,7 @@ def get_changeage():
             filechanged_epoch = int(filechanged_output.stdout.rstrip())
         else:
             log("ERROR: Unrecognized OS.", 0)
-            exit(1)
+            sys.exit(1)
         # calculate no of seconds ago file was changed
         changeage = epoch_now - filechanged_epoch
         return changeage
@@ -251,13 +252,13 @@ def process(data, addr):
     try:
         decrypted_data = decrypt(data.decode("utf-8"))
     except UnicodeDecodeError as unicode_e:
-        log(f"Decode error: {unicode_e}", 0)
+        log(f"Decode error: {unicode_e} {str(addr)}", 0)
         return "NOVALIDDATA"
     except Exception as decrypt_e:
-        log(f"Decrypt error: {decrypt_e}", 0)
+        log(f"Decrypt error: {decrypt_e} {str(addr)}", 0)
         return "NOVALIDDATA"
     if decrypted_data is None:
-        log("No valid data decrypted.", 0)
+        log(f"No valid data decrypted from {str(addr)}.", 0)
         return "NOVALIDDATA"
 
     log('Decrypted data:', 2)
@@ -274,7 +275,7 @@ def process(data, addr):
 
         if current_md5 is None:
             log("Unable to get md5sum for local syncfile.", 0)
-            exit(1)
+            sys.exit(1)
         elif sync_file_changed_recently():
             log("Listener file changed recently - LISTENERFILECHANGEDRECENTLY", 2)
             return "LISTENERFILECHANGEDRECENTLY"
@@ -300,7 +301,7 @@ def process(data, addr):
                 log("Received file OK.", 1)
                 return "LISTENERRECEIVEDFILEOK"
         else:
-            log(f"ERROR: md5sum on received file from {addr} is invalid. Not overwriting current local file.", 0)
+            log(f"ERROR: md5sum on received file from {str(addr)} is invalid. Not overwriting current local file.", 0)
             return "LISTENERRECEIVEDFILEERROR"
 
     # agent is expecting to receive file
@@ -313,14 +314,14 @@ def process(data, addr):
 
     # agent received file successfully
     elif command == 'AGENTRECEIVEDFILEOK':
-        log(f"Agent {addr} received file OK.", 1)
+        log(f"Agent {str(addr)} received file OK.", 1)
 
     # agent received file error
     elif command == 'AGENTRECEIVEDFILEERROR':
-        log(f"ERROR: Agent {addr} failed to receive file.", 0)
+        log(f"ERROR: Agent {str(addr)} failed to receive file.", 0)
 
     elif command == '' or command is None:
-        log(f"No valid data when processing request from {addr}.", 0)
+        log(f"No valid data when processing request from {str(addr)}.", 0)
         log("Returning NOVALIDDATA", 2)
         return "NOVALIDDATA"
 
@@ -329,7 +330,45 @@ def process(data, addr):
         log("Error: Unknown command.", 0)
 
 
+class TransactionTimeoutError(Exception):
+    pass
+
+
+def timeout_handler():
+    raise TransactionTimeoutError("Transaction timeout.")
+
+
+def timeout_handler_wrapper(signum, frame):
+    timeout_handler()
+
+
+def receive(connsock, addr, transaction_timeout):
+    try:
+        total_size = 1024 * 1024 * 500  # max 500 MB
+        received_data = bytearray()
+        bytes_received = 0
+        while bytes_received < total_size:
+            chunk = connsock.recv(32768)
+            if not chunk:
+                break  # connection closed from agent
+            received_data.extend(chunk)
+            bytes_received += len(chunk)
+        data = bytes(received_data)
+        return data
+    except TransactionTimeoutError as timeout_e:
+        log(f"{timeout_e} from {str(addr)}. {transaction_timeout} seconds has passed without transaction finishing.", 0)
+        return False
+
+    except ConnectionResetError as conn_error:
+        log(f"Connection reset error: {conn_error} {str(addr)}", 0)
+        # disconnect the server
+        connsock.close()
+        return False
+
+
 def tcp_listen_and_reply():
+
+    transaction_timeout = 60 * 15  # max 15 minutes for a transaction to finish
 
     # log application start
     log("Application start.", 1)
@@ -347,31 +386,15 @@ def tcp_listen_and_reply():
     while True:
         connsock, addr = s.accept()
 
+        signal.signal(signal.SIGALRM, timeout_handler_wrapper)
+        signal.alarm(transaction_timeout)
+
         # display client address
         log(f"{datetime.datetime.now()} -------------------------------------------", 2)
         log(f"Connection from: {str(addr)}", 2)
 
-        try:
-            total_size = 1024 * 1024 * 500  # max 500 MB
-            received_data = bytearray()
-            bytes_received = 0
-            while bytes_received < total_size:
-                chunk = connsock.recv(32768)
-                if not chunk:
-                    break  # connection closed from agent
-                received_data.extend(chunk)
-                bytes_received += len(chunk)
-            data = bytes(received_data)
-
-        except ConnectionResetError as conn_error:
-            log(f"Connection reset error: {conn_error}", 0)
-            # disconnect the server
-            connsock.close()
-            continue
-
-        # handle port checks and tiny payloads
-        if bytes_received < 5:
-            log(f"Port check from: {str(addr)}.", 1)
+        data=receive(connsock, addr, transaction_timeout)
+        if data is False:
             continue
 
         # generate response
@@ -389,12 +412,13 @@ def tcp_listen_and_reply():
 
 
 def main():
+
     set_env_vars()
     if not file_exists(SYNCFILE):
         log(f"{SYNCFILE} not found. Please check your path and try again.", 0)
-        exit(1)
-    tcp_listen_and_reply()
+        sys.exit(1)
 
+    tcp_listen_and_reply()
 
 if __name__ == '__main__':
     main()
