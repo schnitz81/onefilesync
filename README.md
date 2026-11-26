@@ -45,7 +45,8 @@ SYNC_INTERVAL=10   # how often the file will be synced with the listener
 PORT = 48444
 LOGLEVEL = 1   #  0 : error, 1 : info, 2 : debug
 LOGFILE = "/tmp/onefilesync-listener.log"
-GRACEPERIOD = 3
+GRACE_PERIOD = 3  # least amount of seconds the synced file must be unchanged before a sync
+TRANSACTION_TIMEOUT = 60 * 10  # max seconds for a transaction to finish
 ```
 
 ## Run as containers

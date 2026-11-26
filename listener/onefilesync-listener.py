@@ -24,7 +24,8 @@ SYNCFILE = ""  # /path/to/file
 PORT = 48444
 LOGLEVEL = 1   #  0 : error, 1 : info, 2 : debug
 LOGFILE = "/tmp/onefilesync-listener.log"
-GRACEPERIOD = 3
+GRACE_PERIOD = 3
+TRANSACTION_TIMEOUT = 60 * 10  # max seconds for a transaction to finish
 ###########################################################
 
 
@@ -34,7 +35,8 @@ def set_env_vars():
     global SYNCFILE
     global LOGLEVEL
     global LOGFILE
-    global GRACEPERIOD
+    global GRACE_PERIOD
+    global TRANSACTION_TIMEOUT
 
     # .env file parsing
     env_file = Path(__file__).parent / ".env"
@@ -65,8 +67,10 @@ def set_env_vars():
         LOGLEVEL = int(os.environ['LOGLEVEL'])
     if 'LOGFILE' in os.environ:
         LOGFILE = os.environ['LOGFILE']
-    if 'GRACEPERIOD' in os.environ:
-        GRACEPERIOD = int(os.environ['GRACEPERIOD'])
+    if 'GRACE_PERIOD' in os.environ:
+        GRACE_PERIOD = int(os.environ['GRACE_PERIOD'])
+    if 'TRANSACTION_TIMEOUT' in os.environ:
+        TRANSACTION_TIMEOUT = int(os.environ['TRANSACTION_TIMEOUT'])
 
     # argparse
     parser = argparse.ArgumentParser(prog='onefilesync-listener')
@@ -76,7 +80,8 @@ def set_env_vars():
     parser.add_argument('--file', '-f', action='store', type=str, dest='file', help='same as "--syncfile"')
     parser.add_argument('--loglevel', '-l', action='store', type=int, dest='loglevel', help='Log level: 0 : error, 1 : info, 2 : debug  (default 1)')
     parser.add_argument('--logfile', action='store', type=str, dest='logfile', help='Custom path to log file.')
-    parser.add_argument('--graceperiod', '-g', action='store', type=str, dest='graceperiod', help='Number of seconds after local file has changed to avoid sync (default 3)')
+    parser.add_argument('--grace-period', '-g', action='store', type=str, dest='grace_period', help='Number of seconds after local file has changed to avoid sync (default 3).')
+    parser.add_argument('--transaction-timeout', '-w', action='store', type=str, dest='transaction_timeout', help='Number of seconds a transaction is allowed to take (default 600 / 10 mins).')
     args = parser.parse_args()
 
     # assign values from input arguments if present
@@ -92,8 +97,10 @@ def set_env_vars():
         LOGLEVEL = args.loglevel
     if args.logfile:
         LOGFILE = args.logfile
-    if args.graceperiod:
-        GRACEPERIOD = args.graceperiod
+    if args.grace_period:
+        GRACE_PERIOD = args.grace_period
+    if args.transaction_timeout:
+        TRANSACTION_TIMEOUT = args.transaction_timeout
 
     # make sure necessary parameters are set
     if not SYNCFILE:
@@ -150,7 +157,7 @@ def decrypt(data):
                     log(openssl_error, 0)
         return openssl_output
     except UnicodeDecodeError as decode_e:
-        log("Decoding error. Is the token same in listener and agent?", 0)
+        log(f"Decoding error: {decode_e} Is the token same in listener and agent?", 0)
     except Exception as openssl_e:
         log(openssl_e, 0)
 
@@ -211,7 +218,7 @@ def get_changeage():
 
 def sync_file_changed_recently():
         changeage = get_changeage()
-        if changeage < GRACEPERIOD:
+        if changeage < GRACE_PERIOD:
             return True
         else:
             return False
@@ -342,7 +349,7 @@ def timeout_handler_wrapper(signum, frame):
     timeout_handler()
 
 
-def receive(connsock, addr, transaction_timeout):
+def receive(connsock, addr):
     try:
         total_size = 1024 * 1024 * 500  # max 500 MB
         received_data = bytearray()
@@ -356,7 +363,7 @@ def receive(connsock, addr, transaction_timeout):
         data = bytes(received_data)
         return data
     except TransactionTimeoutError as timeout_e:
-        log(f"{timeout_e} from {str(addr)}. {transaction_timeout} seconds has passed without transaction finishing.", 0)
+        log(f"{timeout_e} from {str(addr)}. {TRANSACTION_TIMEOUT} seconds has passed without transaction finishing.", 0)
         return False
 
     except ConnectionResetError as conn_error:
@@ -367,8 +374,6 @@ def receive(connsock, addr, transaction_timeout):
 
 
 def tcp_listen_and_reply():
-
-    transaction_timeout = 60 * 15  # max 15 minutes for a transaction to finish
 
     # log application start
     log("Application start.", 1)
@@ -387,13 +392,13 @@ def tcp_listen_and_reply():
         connsock, addr = s.accept()
 
         signal.signal(signal.SIGALRM, timeout_handler_wrapper)
-        signal.alarm(transaction_timeout)
+        signal.alarm(TRANSACTION_TIMEOUT)
 
         # display client address
         log(f"{datetime.datetime.now()} -------------------------------------------", 2)
         log(f"Connection from: {str(addr)}", 2)
 
-        data=receive(connsock, addr, transaction_timeout)
+        data=receive(connsock, addr)
         if data is False:
             continue
 
